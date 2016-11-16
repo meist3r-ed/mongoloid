@@ -5,6 +5,13 @@
  */
 package mongoloid;
 
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.Statement;
 import java.util.Scanner;
 
 /**
@@ -12,17 +19,49 @@ import java.util.Scanner;
  * @author Gustavo
  */
 public class DBManager {
+    public String message_issueGeneric = ">[System]: ERROR: ";
+    public String message_successOpenFile = ">[System]: File successfully opened";
+    public String message_successCloseFile = ">[System]: File successfully closed";
+    
     String server;
     String user;
     String pass;
         
     ConnectionManager connection;
+    Statement stmt;
+    ResultSet rs;
+    ResultSetMetaData rsmd;
     
     public DBManager(){
         server = "";
         user = "";
         pass = "";
         connection = new ConnectionManager();
+    }
+    
+    public boolean generateDatabase() throws IOException{
+        Scanner scanner = new Scanner(System.in);
+        String filename = "";
+        FileWriter output = null;
+        
+        System.out.println(">[DATABASE GENERATOR aka DbGen]:");
+        System.out.println(">[DbGen]: Please type the output filename");
+        System.out.printf(">[DbGen]: ");
+        filename = scanner.nextLine();
+        
+        try{
+            output = new FileWriter(filename);
+            System.out.println(message_successOpenFile);
+            output.write("use " + this.user + "\n");
+        }
+        finally{
+            if(output != null){
+                output.close();
+                System.out.println(message_successCloseFile);
+            }
+        }
+        
+        return true;
     }
     
     public void getConnection(){
@@ -63,12 +102,24 @@ public class DBManager {
         Scanner scanner = new Scanner(System.in);
         int opt = 0;
         
-        System.out.println(">[" + user + "]: " + server + "\n");
-        System.out.println("\t[1]: Generate database from tables");
-        System.out.println("\t[2]: Generate indexes from ");
-        System.out.println("\t[3]: Disconnect and close");
         while(opt != 3){
+            System.out.println(">[" + user + "]: " + server);
+            System.out.println("\t[1]: Generate database from tables");
+            System.out.println("\t[2]: Generate indexes from tables");
+            System.out.println("\t[3]: Disconnect and close");
+        
             opt = scanner.nextInt();
+            switch(opt){
+                case 1:
+                    try{
+                        generateDatabase();
+                    }catch(IOException ioe){
+                        System.out.println(message_issueGeneric + ioe.getMessage());
+                    }
+                    break;
+                case 2:
+                    break;
+            }
         }
         connection.disconnect();
     }

@@ -24,13 +24,10 @@ public class ConnectionManager {
     public String message_successLogin = ">[System]: Successfully connected to database!";
     
     Connection connection;
-    Statement stmt;
-    ResultSet rs;
-    ResultSetMetaData rsmd;
     
-    /* Conecta com o banco em @grad.icmc.usp.br:15215:orcl */
+    /* Connection API */
+    /* ----------------------------------------------------------------*/
     public int connect(String server, String user, String pass){
-        /* Tenta conectar */
         try {
             String constring = "jdbc:oracle:thin:" + server;
             Class.forName("oracle.jdbc.driver.OracleDriver");
@@ -58,5 +55,11 @@ public class ConnectionManager {
             System.out.println(message_issueClose);
         }
         return false;
+    }
+    /* ----------------------------------------------------------------*/
+    
+    /* Get Statement da conexao */
+    public Connection getStatement(){
+        return connection;
     }
 }
