@@ -19,6 +19,7 @@ public class Main {
         System.out.println("/_/  /_/\\____/_/ /_/\\__, /\\____/_/\\____/_/\\__,_/   ");
         System.out.println("                   /____/                      v0.0");
         System.out.println(">>>>>  SQL 2 MongoDB Conversor by meist3r-ed  <<<<<");
+        System.out.println();
     }
 
     /**
@@ -26,6 +27,9 @@ public class Main {
      */
     public static void main(String[] args) {
         Main.splash();
+        DBManager mng = new DBManager();
+        mng.getConnection();
+        mng.getOps();
     }
     
 }

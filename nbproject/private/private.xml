@@ -3,8 +3,8 @@
     <editor-bookmarks xmlns="http://www.netbeans.org/ns/editor-bookmarks/2" lastBookmarkId="0"/>
     <open-files xmlns="http://www.netbeans.org/ns/projectui-open-files/2">
         <group>
-            <file>file:/C:/Users/Gustavo/Documents/Codes/Java/mongoloid/src/mongoloid/Manager.java</file>
-            <file>file:/C:/Users/Gustavo/Documents/Codes/Java/mongoloid/src/mongoloid/Connection.java</file>
+            <file>file:/C:/Users/Gustavo/Documents/Codes/Java/mongoloid/src/mongoloid/ConnectionManager.java</file>
+            <file>file:/C:/Users/Gustavo/Documents/Codes/Java/mongoloid/src/mongoloid/DBManager.java</file>
             <file>file:/C:/Users/Gustavo/Documents/Codes/Java/mongoloid/src/mongoloid/Main.java</file>
         </group>
     </open-files>
