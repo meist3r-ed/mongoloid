@@ -5,12 +5,12 @@
  */
 package mongoloid;
 
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Scanner;
 
@@ -20,6 +20,7 @@ import java.util.Scanner;
  */
 public class DBManager {
     public String message_issueGeneric = ">[System]: ERROR: ";
+    public String message_issueTables = ">[System]: ERROR: Could not generate Statement or ResultSet";
     public String message_successOpenFile = ">[System]: File successfully opened";
     public String message_successCloseFile = ">[System]: File successfully closed";
     
@@ -27,7 +28,8 @@ public class DBManager {
     String user;
     String pass;
         
-    ConnectionManager connection;
+    ConnectionManager conman;
+    Connection connection;
     Statement stmt;
     ResultSet rs;
     ResultSetMetaData rsmd;
@@ -36,7 +38,98 @@ public class DBManager {
         server = "";
         user = "";
         pass = "";
-        connection = new ConnectionManager();
+        conman = new ConnectionManager();
+    }
+    
+    private void flushStatement(Statement stmt){
+        try{
+            stmt.close();
+        } catch(SQLException sqle){
+            System.out.println(sqle.getMessage());
+        }
+    }
+    
+    private void flushDB(Connection connection, Statement stmt, ResultSet rs){
+        if(connection != null) connection = null;
+        if(stmt != null) flushStatement(stmt);
+        if(rs != null) connection = null;
+    }
+    
+    private void generateDBTuples(FileWriter output, String curtab, int opt) throws IOException{
+        try{
+            Statement stmttup = connection.createStatement();
+            ResultSet rstup = stmttup.executeQuery("SELECT * FROM " + curtab);
+            rsmd = rstup.getMetaData();
+            
+            output.write("db." + curtab + ".insert([");
+            
+            rstup.next();
+            /* Runs through tuples */
+            while(true){
+                output.write("{");
+                int cnt = rsmd.getColumnCount();
+                int i = 0;
+                
+                for(i = 0; i < cnt; i++){
+                    output.write("\"" + rsmd.getColumnName(i + 1) + "\" : ");
+                    output.write("\"" + rstup.getString(i + 1) + "\"");
+                    if(i < cnt - 1)
+                        output.write(", ");
+                }
+                output.write("}");
+                if(rstup.next()){
+                    output.write(", ");
+                }
+                else{
+                    break;
+                }
+                    
+            }
+            
+            output.write("])" + System.getProperty("line.separator"));
+            flushStatement(stmttup);
+        }catch(SQLException sqle){
+            output.write("])" + System.getProperty("line.separator"));
+            System.out.println(sqle.getMessage());
+        }
+    }
+    
+    private void generateDBTable(FileWriter output, String curtab) throws IOException{
+        if(!curtab.substring(0, 4).equals("MLOG")){
+            Scanner scanner = new Scanner(System.in);
+            int opt = 0;
+            
+            System.out.println(">[DbGen]: CURRENT TABLE: " + curtab);
+            System.out.println(">[DbGen]: Choose an operation [1. Simple, 2. Link, 3. Embedding, 4. NxN, 5. Skip]");
+            System.out.printf(">[DbGen]: ");
+            opt = scanner.nextInt();
+            output.write("db.createCollection(\"" + curtab + "\")" + System.getProperty("line.separator"));
+            generateDBTuples(output, curtab, opt);
+        }
+    }
+    
+    private boolean generateDBOutput(FileWriter output) throws IOException{
+        connection = conman.getConnection();
+        stmt = conman.makeStatement(connection);
+        rs = conman.makeResultSet(stmt, "SELECT table_name FROM user_tables WHERE table_name NOT IN(SELECT table_name FROM user_snapshots)");
+        
+        if(connection != null && stmt != null && rs != null){
+            /* Iteration in tables */
+            try{
+                while (rs.next()) {
+                    generateDBTable(output, rs.getString("table_name"));
+                }
+            }catch(SQLException sqle){
+                System.out.println(sqle.getMessage());
+            }
+            
+            flushDB(connection, stmt, rs);
+        }
+        else{
+            System.out.println(message_issueTables);
+        }
+        
+        return true;
     }
     
     public boolean generateDatabase() throws IOException{
@@ -52,7 +145,8 @@ public class DBManager {
         try{
             output = new FileWriter(filename);
             System.out.println(message_successOpenFile);
-            output.write("use " + this.user + "\n");
+            output.write("use " + this.user + System.getProperty("line.separator"));
+            generateDBOutput(output);
         }
         finally{
             if(output != null){
@@ -94,7 +188,7 @@ public class DBManager {
             tmp = scanner.nextLine();
             pass = tmp;
 
-            ok = connection.connect(server, user, pass);
+            ok = conman.connect(server, user, pass);
         }
     }
     
@@ -121,6 +215,6 @@ public class DBManager {
                     break;
             }
         }
-        connection.disconnect();
+        conman.disconnect();
     }
 }

@@ -58,8 +58,35 @@ public class ConnectionManager {
     }
     /* ----------------------------------------------------------------*/
     
-    /* Get Statement da conexao */
-    public Connection getStatement(){
+    /* Get current connection */
+    public Connection getConnection(){
         return connection;
+    }
+    
+    public Statement makeStatement(Connection connection){
+        try{
+            return connection.createStatement();
+        }catch(SQLException sqle){
+            System.out.println(sqle.getMessage());
+            return null;
+        }
+    }
+    
+    public ResultSet makeResultSet(Statement stmt, String query){
+        try{
+            return stmt.executeQuery(query);
+        }catch(SQLException sqle){
+            System.out.println(sqle.getMessage());
+            return null;
+        }
+    }
+    
+    public ResultSetMetaData makeRSMD(ResultSet rs){
+        try{
+            return rs.getMetaData();
+        }catch(SQLException sqle){
+            System.out.println(sqle.getMessage());
+            return null;
+        }
     }
 }
