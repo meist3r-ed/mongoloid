@@ -32,6 +32,7 @@ public class DBManager {
     ArrayList<String> pks;
     ArrayList<String> uniques;
     ArrayList<String> fks;
+    ArrayList<String> fksRefTabs;
         
     ConnectionManager conman;
     Connection connection;
@@ -62,13 +63,14 @@ public class DBManager {
     
     /* Get current table primary keys */
     private void getPks(String curtab){
-        String pkQuery = "SELECT column_name FROM all_cons_columns WHERE constraint_name = (" +
-        "SELECT constraint_name FROM user_constraints " +
-        "WHERE UPPER(table_name) = UPPER('" + curtab + "') AND CONSTRAINT_TYPE = 'P'" +
-        ")";
-        
         try{
             Statement stmt2 = connection.createStatement();
+            
+            String pkQuery = "SELECT column_name FROM all_cons_columns WHERE constraint_name = (" +
+            "SELECT constraint_name FROM user_constraints " +
+            "WHERE UPPER(table_name) = UPPER('" + curtab + "') AND CONSTRAINT_TYPE = 'P'" +
+            ")";
+            
             ResultSet rs2 = stmt2.executeQuery(pkQuery);
             
             if(pks == null){
@@ -88,6 +90,43 @@ public class DBManager {
         }
     }
     
+    /* Get current table foreign keys + referenced tables */
+    private void getFks(String curtab){
+        try{
+            Statement stmt2 = connection.createStatement();
+            
+            String fksQuery = "SELECT DISTINCT a.column_name, c_pk.table_name r_table_name FROM all_cons_columns a " +
+            "JOIN all_constraints c ON a.owner = c.owner " +
+            "AND a.constraint_name = c.constraint_name " +
+            "JOIN all_constraints c_pk ON c.r_owner = c_pk.owner " +
+            "AND c.r_constraint_name = c_pk.constraint_name " +
+            "WHERE c.constraint_type = 'R' " +
+            "AND a.table_name = '" + curtab + "'";
+            
+            ResultSet rs2 = stmt2.executeQuery(fksQuery);
+            
+            if(fks == null && fksRefTabs == null){
+                fks = new ArrayList<>();
+                fksRefTabs = new ArrayList<>();
+            }
+            if(!fks.isEmpty()){
+                fks.clear();
+            }
+            if(!fksRefTabs.isEmpty()){
+                fksRefTabs.clear();
+            }
+
+            while(rs2.next()){
+                fks.add(rs2.getString(1));
+                fksRefTabs.add(rs2.getString(2));
+            }
+
+            stmt2.close();
+        } catch(SQLException sqle){
+            System.out.println(message_issueGeneric + sqle.getMessage());
+        }
+    }
+    
     /* Generates mongo documents from current table + linking option */
     private void generateDBTuples(FileWriter output, String curtab, int opt) throws IOException{
         try{
@@ -98,6 +137,7 @@ public class DBManager {
             output.write("db." + curtab + ".insert([");
             
             getPks(curtab);
+            //getFks(curtab);
             rstup.next();
             /* Runs through tuples */
             while(true){
@@ -105,6 +145,20 @@ public class DBManager {
                 int cnt = rsmd.getColumnCount();
                 int i = 0;
                 int pkcount = pks.size();
+                
+                /* Further verification for comma writing */
+                int written = 0;
+                /* Mongo's attributes */
+                for(i = 0; i < cnt; i++){
+                    written = 0;
+                    if(!pks.contains(rsmd.getColumnName(i + 1)) && rstup.getString(i + 1) != null){
+                        output.write("\"" + rsmd.getColumnName(i + 1) + "\" : ");
+                        output.write("\"" + rstup.getString(i + 1) + "\"");
+                        written = 1;
+                    }
+                    if(written == 1)
+                        output.write(", ");
+                }
                 
                 /* Mongo's document _id */
                 if(pkcount != 0){
@@ -115,20 +169,7 @@ public class DBManager {
                         if(i < pkcount - 1)
                             output.write(", ");
                     }
-                    if(pkcount < cnt)
-                        output.write("}, ");
-                    else
-                        output.write("}");
-                }
-
-                /* Mongo's attributes */
-                for(i = 0; i < cnt; i++){
-                    if(!pks.contains(rsmd.getColumnName(i + 1))){
-                        output.write("\"" + rsmd.getColumnName(i + 1) + "\" : ");
-                        output.write("\"" + rstup.getString(i + 1) + "\"");
-                        if(i < cnt - 1)
-                            output.write(", ");
-                    }
+                    output.write("}");
                 }
                 
                 output.write("}");
@@ -137,8 +178,8 @@ public class DBManager {
                 }
                 else{
                     break;
-                }    
-            }            
+                }
+            }
             output.write("])" + System.getProperty("line.separator"));
             flushStatement(stmttup);
         }catch(SQLException sqle){
@@ -154,7 +195,7 @@ public class DBManager {
             int opt = 0;
             
             System.out.println(">[DbGen]: CURRENT TABLE: " + curtab);
-            System.out.println(">[DbGen]: Choose an operation [1. Simple, 2. Link, 3. Embedding, 4. NxN, 5. Skip]");
+            System.out.println(">[DbGen]: Choose an operation [1. Simple, 2. Referencing, 3. Embedding, 4. NxN, 5. Skip]");
             System.out.printf(">[DbGen]: ");
             opt = scanner.nextInt();
             if(opt != 5){
@@ -241,7 +282,7 @@ public class DBManager {
             user = tmp;
             /* Password */
             System.out.printf(">[Password]: ");
-            tmp = String.valueOf(System.console().readPassword());
+            tmp = scanner.nextLine();
             pass = tmp;
 
             ok = conman.connect(server, user, pass);
