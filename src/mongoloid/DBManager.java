@@ -12,6 +12,7 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Scanner;
 
 /**
@@ -27,6 +28,10 @@ public class DBManager {
     String server;
     String user;
     String pass;
+    
+    ArrayList<String> pks;
+    ArrayList<String> uniques;
+    ArrayList<String> fks;
         
     ConnectionManager conman;
     Connection connection;
@@ -45,7 +50,7 @@ public class DBManager {
         try{
             stmt.close();
         } catch(SQLException sqle){
-            System.out.println(sqle.getMessage());
+            System.out.println(message_issueGeneric + sqle.getMessage());
         }
     }
     
@@ -55,45 +60,94 @@ public class DBManager {
         if(rs != null) connection = null;
     }
     
+    /* Get current table primary keys */
+    private void getPks(String curtab){
+        String pkQuery = "SELECT column_name FROM all_cons_columns WHERE constraint_name = (" +
+        "SELECT constraint_name FROM user_constraints " +
+        "WHERE UPPER(table_name) = UPPER('" + curtab + "') AND CONSTRAINT_TYPE = 'P'" +
+        ")";
+        
+        try{
+            Statement stmt2 = connection.createStatement();
+            ResultSet rs2 = stmt2.executeQuery(pkQuery);
+            
+            if(pks == null){
+                pks = new ArrayList<>();
+            }
+            if(!pks.isEmpty()){
+                pks.clear();
+            }
+
+            while(rs2.next()){
+                pks.add(rs2.getString(1));
+            }
+
+            stmt2.close();
+        } catch(SQLException sqle){
+            System.out.println(message_issueGeneric + sqle.getMessage());
+        }
+    }
+    
+    /* Generates mongo documents from current table + linking option */
     private void generateDBTuples(FileWriter output, String curtab, int opt) throws IOException{
         try{
             Statement stmttup = connection.createStatement();
             ResultSet rstup = stmttup.executeQuery("SELECT * FROM " + curtab);
             rsmd = rstup.getMetaData();
-            
+
             output.write("db." + curtab + ".insert([");
             
+            getPks(curtab);
             rstup.next();
             /* Runs through tuples */
             while(true){
                 output.write("{");
                 int cnt = rsmd.getColumnCount();
                 int i = 0;
+                int pkcount = pks.size();
                 
-                for(i = 0; i < cnt; i++){
-                    output.write("\"" + rsmd.getColumnName(i + 1) + "\" : ");
-                    output.write("\"" + rstup.getString(i + 1) + "\"");
-                    if(i < cnt - 1)
-                        output.write(", ");
+                /* Mongo's document _id */
+                if(pkcount != 0){
+                    output.write("\"_id\" : {");
+                    for(i = 0; i < pkcount; i++){
+                        output.write("\"" + pks.get(i) + "\" : ");
+                        output.write("\"" + rstup.getString(pks.get(i)) + "\"");
+                        if(i < pkcount - 1)
+                            output.write(", ");
+                    }
+                    if(pkcount < cnt)
+                        output.write("}, ");
+                    else
+                        output.write("}");
                 }
+
+                /* Mongo's attributes */
+                for(i = 0; i < cnt; i++){
+                    if(!pks.contains(rsmd.getColumnName(i + 1))){
+                        output.write("\"" + rsmd.getColumnName(i + 1) + "\" : ");
+                        output.write("\"" + rstup.getString(i + 1) + "\"");
+                        if(i < cnt - 1)
+                            output.write(", ");
+                    }
+                }
+                
                 output.write("}");
                 if(rstup.next()){
                     output.write(", ");
                 }
                 else{
                     break;
-                }
-                    
-            }
-            
+                }    
+            }            
             output.write("])" + System.getProperty("line.separator"));
             flushStatement(stmttup);
         }catch(SQLException sqle){
             output.write("])" + System.getProperty("line.separator"));
-            System.out.println(sqle.getMessage());
+            System.out.println(message_issueGeneric + sqle.getMessage());
         }
     }
     
+    /* Generates mongo collections from current table */
     private void generateDBTable(FileWriter output, String curtab) throws IOException{
         if(!curtab.substring(0, 4).equals("MLOG")){
             Scanner scanner = new Scanner(System.in);
@@ -103,8 +157,10 @@ public class DBManager {
             System.out.println(">[DbGen]: Choose an operation [1. Simple, 2. Link, 3. Embedding, 4. NxN, 5. Skip]");
             System.out.printf(">[DbGen]: ");
             opt = scanner.nextInt();
-            output.write("db.createCollection(\"" + curtab + "\")" + System.getProperty("line.separator"));
-            generateDBTuples(output, curtab, opt);
+            if(opt != 5){
+                output.write("db.createCollection(\"" + curtab + "\")" + System.getProperty("line.separator"));
+                generateDBTuples(output, curtab, opt);
+            }
         }
     }
     
@@ -120,7 +176,7 @@ public class DBManager {
                     generateDBTable(output, rs.getString("table_name"));
                 }
             }catch(SQLException sqle){
-                System.out.println(sqle.getMessage());
+                System.out.println(message_issueGeneric + sqle.getMessage());
             }
             
             flushDB(connection, stmt, rs);
@@ -185,7 +241,7 @@ public class DBManager {
             user = tmp;
             /* Password */
             System.out.printf(">[Password]: ");
-            tmp = scanner.nextLine();
+            tmp = String.valueOf(System.console().readPassword());
             pass = tmp;
 
             ok = conman.connect(server, user, pass);
