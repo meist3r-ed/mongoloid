@@ -137,7 +137,7 @@ public class DBManager {
             output.write("db." + curtab + ".insert([");
             
             getPks(curtab);
-            //getFks(curtab);
+            if(opt != 1) getFks(curtab);
             rstup.next();
             /* Runs through tuples */
             while(true){
@@ -145,6 +145,7 @@ public class DBManager {
                 int cnt = rsmd.getColumnCount();
                 int i = 0;
                 int pkcount = pks.size();
+                String curtype = "";
                 
                 /* Further verification for comma writing */
                 int written = 0;
@@ -152,8 +153,14 @@ public class DBManager {
                 for(i = 0; i < cnt; i++){
                     written = 0;
                     if(!pks.contains(rsmd.getColumnName(i + 1)) && rstup.getString(i + 1) != null){
+                        curtype = rsmd.getColumnTypeName(i + 1).toLowerCase();
                         output.write("\"" + rsmd.getColumnName(i + 1) + "\" : ");
-                        output.write("\"" + rstup.getString(i + 1) + "\"");
+                        if(curtype.equals("number"))
+                            output.write(rstup.getString(i + 1));
+                        else if(curtype.equals("date"))
+                            output.write("ISODate(\"" + rstup.getString(i + 1) + "\")");
+                        else
+                            output.write("\"" + rstup.getString(i + 1) + "\"");
                         written = 1;
                     }
                     if(written == 1)
@@ -164,8 +171,14 @@ public class DBManager {
                 if(pkcount != 0){
                     output.write("\"_id\" : {");
                     for(i = 0; i < pkcount; i++){
+                        curtype = rsmd.getColumnTypeName(rstup.findColumn(pks.get(i))).toLowerCase();
                         output.write("\"" + pks.get(i) + "\" : ");
-                        output.write("\"" + rstup.getString(pks.get(i)) + "\"");
+                        if(curtype.equals("number"))
+                            output.write(rstup.getString(pks.get(i)));
+                        else if(curtype.equals("date"))
+                            output.write("ISODate(\"" + rstup.getString(pks.get(i)) + "\")");
+                        else
+                            output.write("\"" + rstup.getString(pks.get(i)) + "\"");
                         if(i < pkcount - 1)
                             output.write(", ");
                     }
