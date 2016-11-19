@@ -5,6 +5,7 @@
  */
 package mongoloid;
 
+import java.io.Console;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.sql.Connection;
@@ -127,76 +128,73 @@ public class DBManager {
         }
     }
     
+    /* Writes the column specified by col into the output file */
+    private void writeColumn(FileWriter output, ResultSet rstup, int col) throws IOException{
+        try{
+            String curtype = rsmd.getColumnTypeName(col).toLowerCase();
+            output.write("\"" + rsmd.getColumnName(col) + "\" : ");
+            if(curtype.equals("number"))
+                output.write(rstup.getString(col));
+            else if(curtype.equals("date"))
+                output.write("ISODate(\"" + rstup.getString(col) + "\")");
+            else
+                output.write("\"" + rstup.getString(col) + "\"");
+        }catch(SQLException sqle){
+            System.out.println(message_issueGeneric + sqle.getMessage());
+        }
+    }
+    
     /* Generates mongo documents from current table + linking option */
     private void generateDBTuples(FileWriter output, String curtab, int opt) throws IOException{
         try{
             Statement stmttup = connection.createStatement();
             ResultSet rstup = stmttup.executeQuery("SELECT * FROM " + curtab);
             rsmd = rstup.getMetaData();
-
-            output.write("db." + curtab + ".insert([");
             
             getPks(curtab);
             if(opt != 1) getFks(curtab);
+            
+            int cnt = rsmd.getColumnCount();
+            int pkcount = pks.size();
+            String curtype = "";
+            
             rstup.next();
             /* Runs through tuples */
             while(true){
-                output.write("{");
-                int cnt = rsmd.getColumnCount();
+                output.write("db." + curtab + ".insert(");
+                output.write("{ ");
                 int i = 0;
-                int pkcount = pks.size();
-                String curtype = "";
-                
-                /* Further verification for comma writing */
-                int written = 0;
-                /* Mongo's attributes */
-                for(i = 0; i < cnt; i++){
-                    written = 0;
-                    if(!pks.contains(rsmd.getColumnName(i + 1)) && rstup.getString(i + 1) != null){
-                        curtype = rsmd.getColumnTypeName(i + 1).toLowerCase();
-                        output.write("\"" + rsmd.getColumnName(i + 1) + "\" : ");
-                        if(curtype.equals("number"))
-                            output.write(rstup.getString(i + 1));
-                        else if(curtype.equals("date"))
-                            output.write("ISODate(\"" + rstup.getString(i + 1) + "\")");
-                        else
-                            output.write("\"" + rstup.getString(i + 1) + "\"");
-                        written = 1;
-                    }
-                    if(written == 1)
-                        output.write(", ");
-                }
                 
                 /* Mongo's document _id */
                 if(pkcount != 0){
-                    output.write("\"_id\" : {");
+                    output.write("\"_id\" : { ");
                     for(i = 0; i < pkcount; i++){
-                        curtype = rsmd.getColumnTypeName(rstup.findColumn(pks.get(i))).toLowerCase();
-                        output.write("\"" + pks.get(i) + "\" : ");
-                        if(curtype.equals("number"))
-                            output.write(rstup.getString(pks.get(i)));
-                        else if(curtype.equals("date"))
-                            output.write("ISODate(\"" + rstup.getString(pks.get(i)) + "\")");
-                        else
-                            output.write("\"" + rstup.getString(pks.get(i)) + "\"");
-                        if(i < pkcount - 1)
-                            output.write(", ");
+                        if(i != 0) output.write(", ");
+                        writeColumn(output, rstup, rstup.findColumn(pks.get(i)));
                     }
-                    output.write("}");
+                    output.write(" }");
                 }
                 
-                output.write("}");
-                if(rstup.next()){
-                    output.write(", ");
+                /* Mongo's attributes */
+                if(pkcount < cnt){
+                    for(i = 0; i < cnt; i++){
+                        if(!pks.contains(rsmd.getColumnName(i + 1)) && rstup.getString(i + 1) != null){
+                            if(i != 0) output.write(", ");
+                            writeColumn(output, rstup, i + 1);
+                        }
+                    }
                 }
-                else{
+                
+                output.write(" })");
+                if(rstup.next())
+                    output.write(System.getProperty("line.separator"));
+                else
                     break;
-                }
             }
-            output.write("])" + System.getProperty("line.separator"));
+            output.write(System.getProperty("line.separator"));
             flushStatement(stmttup);
         }catch(SQLException sqle){
-            output.write("])" + System.getProperty("line.separator"));
+            output.write("})" + System.getProperty("line.separator"));
             System.out.println(message_issueGeneric + sqle.getMessage());
         }
     }
