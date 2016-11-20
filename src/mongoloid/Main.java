@@ -17,7 +17,7 @@ public class Main {
         System.out.println("  / /|_/ / __ \\/ __ \\/ __ `/ __ \\/ / __ \\/ / __  / ");
         System.out.println(" / /  / / /_/ / / / / /_/ / /_/ / / /_/ / / /_/ /  ");
         System.out.println("/_/  /_/\\____/_/ /_/\\__, /\\____/_/\\____/_/\\__,_/   ");
-        System.out.println("                   /____/                      v0.3");
+        System.out.println("                   /____/                      v0.7");
         System.out.println(">>>>  Oracle 2 MongoDB Conversor by meist3r-ed  <<<<");
         System.out.println();
     }

@@ -34,6 +34,7 @@ public class DBManager {
     ArrayList<String> uniques;
     ArrayList<String> fks;
     ArrayList<String> fksRefTabs;
+    ArrayList<String> fksRefCols;
         
     ConnectionManager conman;
     Connection connection;
@@ -91,24 +92,53 @@ public class DBManager {
         }
     }
     
+    /* Get current table uniques */
+    private void getUniques(String curtab){
+        try{
+            Statement stmt2 = connection.createStatement();
+            
+            String uniquesQuery = "SELECT column_name FROM all_cons_columns WHERE constraint_name = (" +
+            "SELECT constraint_name FROM user_constraints " +
+            "WHERE UPPER(table_name) = UPPER('" + curtab + "') AND CONSTRAINT_TYPE = 'U'" +
+            ")";
+            
+            ResultSet rs2 = stmt2.executeQuery(uniquesQuery);
+            
+            if(uniques == null){
+                uniques = new ArrayList<>();
+            }
+            if(!uniques.isEmpty()){
+                uniques.clear();
+            }
+        
+            while(rs2.next()){
+                uniques.add(rs2.getString(1));
+            }
+        
+            stmt2.close();
+        } catch(SQLException sqle){
+            System.out.println(message_issueGeneric + sqle.getMessage());
+        }
+    }
+    
     /* Get current table foreign keys + referenced tables */
     private void getFks(String curtab){
         try{
             Statement stmt2 = connection.createStatement();
             
-            String fksQuery = "SELECT DISTINCT a.column_name, c_pk.table_name r_table_name FROM all_cons_columns a " +
-            "JOIN all_constraints c ON a.owner = c.owner " +
-            "AND a.constraint_name = c.constraint_name " +
-            "JOIN all_constraints c_pk ON c.r_owner = c_pk.owner " +
-            "AND c.r_constraint_name = c_pk.constraint_name " +
-            "WHERE c.constraint_type = 'R' " +
-            "AND a.table_name = '" + curtab + "'";
+            String fksQuery = "SELECT COLS.COLUMN_NAME, FK.TABLE_NAME, FK.COLUMN_NAME"
+                    + " FROM USER_CONSTRAINTS CONS"
+                    + " LEFT JOIN USER_CONS_COLUMNS COLS ON CONS.CONSTRAINT_NAME = COLS.CONSTRAINT_NAME"
+                    + " LEFT JOIN USER_CONS_COLUMNS FK ON FK.CONSTRAINT_NAME = CONS.R_CONSTRAINT_NAME AND FK.POSITION = COLS.POSITION"
+                    + " WHERE CONSTRAINT_TYPE = 'R'"
+                    + " AND UPPER(COLS.TABLE_NAME) = UPPER('" + curtab + "')";
             
             ResultSet rs2 = stmt2.executeQuery(fksQuery);
             
-            if(fks == null && fksRefTabs == null){
+            if(fks == null && fksRefTabs == null && fksRefCols == null){
                 fks = new ArrayList<>();
                 fksRefTabs = new ArrayList<>();
+                fksRefCols = new ArrayList<>();
             }
             if(!fks.isEmpty()){
                 fks.clear();
@@ -116,10 +146,14 @@ public class DBManager {
             if(!fksRefTabs.isEmpty()){
                 fksRefTabs.clear();
             }
+            if(!fksRefCols.isEmpty()){
+                fksRefCols.clear();
+            }
 
             while(rs2.next()){
                 fks.add(rs2.getString(1));
                 fksRefTabs.add(rs2.getString(2));
+                fksRefCols.add(rs2.getString(3));
             }
 
             stmt2.close();
@@ -144,15 +178,49 @@ public class DBManager {
         }
     }
     
+    /* Writes the column specified by col into the output file */
+    private void writeRefColumn(FileWriter output, ResultSet rstup, int col) throws IOException{
+        try{
+            String curtype = rsmd.getColumnTypeName(col).toLowerCase();
+            int fkid = fks.indexOf(rsmd.getColumnName(col));
+            
+            output.write("\"" + rsmd.getColumnName(col) + "\" : ");
+            output.write("{ \"" + fksRefCols.get(fkid) + "\" : ");
+            if(curtype.equals("number"))
+                output.write(rstup.getString(col));
+            else if(curtype.equals("date"))
+                output.write("ISODate(\"" + rstup.getString(col) + "\")");
+            else
+                output.write("\"" + rstup.getString(col) + "\"");
+            output.write(" }");
+        }catch(SQLException sqle){
+            System.out.println(message_issueGeneric + sqle.getMessage());
+        }
+    }
+    
+    private int getMap(String curcol){
+        Scanner scanner = new Scanner(System.in);
+        int map = 0;
+        
+        System.out.println(">[DbGen]: CURRENT COLUMN: " + curcol);
+        System.out.println(">[DbGen]: Map [1. Yes, 2. No]");
+        System.out.printf(">[DbGen]: ");
+        map = scanner.nextInt();
+        
+        return map;
+    }
+    
     /* Generates mongo documents from current table + linking option */
     private void generateDBTuples(FileWriter output, String curtab, int opt) throws IOException{
         try{
             Statement stmttup = connection.createStatement();
             ResultSet rstup = stmttup.executeQuery("SELECT * FROM " + curtab);
+            Scanner scanner = null;
+            //int map = 0;
+            
             rsmd = rstup.getMetaData();
             
             getPks(curtab);
-            if(opt != 1) getFks(curtab);
             
             int cnt = rsmd.getColumnCount();
             int pkcount = pks.size();
@@ -170,7 +238,14 @@ public class DBManager {
                     output.write("\"_id\" : { ");
                     for(i = 0; i < pkcount; i++){
                         if(i != 0) output.write(", ");
-                        writeColumn(output, rstup, rstup.findColumn(pks.get(i)));
+                        if(opt == 1) writeColumn(output, rstup, rstup.findColumn(pks.get(i)));
+                        else if(opt == 2){
+                            if(fks.contains(pks.get(i))){
+                                writeRefColumn(output, rstup, rstup.findColumn(pks.get(i)));
+                            }
+                            else
+                                writeColumn(output, rstup, rstup.findColumn(pks.get(i)));
+                        }
                     }
                     output.write(" }");
                 }
@@ -180,7 +255,14 @@ public class DBManager {
                     for(i = 0; i < cnt; i++){
                         if(!pks.contains(rsmd.getColumnName(i + 1)) && rstup.getString(i + 1) != null){
                             if(i != 0) output.write(", ");
-                            writeColumn(output, rstup, i + 1);
+                            if(opt == 1) writeColumn(output, rstup, i + 1);
+                            else if(opt == 2){
+                                if(fks.contains(rsmd.getColumnName(i + 1))){
+                                    writeRefColumn(output, rstup, i + 1);
+                                }
+                                else
+                                    writeColumn(output, rstup, i + 1);
+                            }
                         }
                     }
                 }
@@ -206,10 +288,15 @@ public class DBManager {
             int opt = 0;
             
             System.out.println(">[DbGen]: CURRENT TABLE: " + curtab);
-            System.out.println(">[DbGen]: Choose an operation [1. Simple, 2. Referencing, 3. Embedding, 4. NxN, 5. Skip]");
+            getFks(curtab);
+            if(fks.size() > 0)
+                System.out.println(">[DbGen]: Choose an operation [1. Simple, 2. Referencing, 3. Embedding, 4. NxN, 5. Skip]");
+            else
+                System.out.println(">[DbGen]: Choose an operation [1. Simple, 5. Skip]");
             System.out.printf(">[DbGen]: ");
             opt = scanner.nextInt();
-            if(opt != 5){
+            
+            if(opt >= 1 && opt < 5){
                 output.write("db.createCollection(\"" + curtab + "\")" + System.getProperty("line.separator"));
                 generateDBTuples(output, curtab, opt);
             }
@@ -255,6 +342,88 @@ public class DBManager {
             System.out.println(message_successOpenFile);
             output.write("use " + this.user + System.getProperty("line.separator"));
             generateDBOutput(output);
+        }
+        finally{
+            if(output != null){
+                output.close();
+                System.out.println(message_successCloseFile);
+            }
+        }
+        
+        return true;
+    }
+    
+    /* Generates mongo indexes from current table */
+    private void generateIDTable(FileWriter output, String curtab) throws IOException{
+        if(!curtab.substring(0, 4).equals("MLOG")){
+            Scanner scanner = new Scanner(System.in);
+            int i = 0;
+            
+            System.out.println(">[IdGen]: CURRENT TABLE: " + curtab);
+            
+            getPks(curtab);
+            getUniques(curtab);
+            int pkscount = pks.size();
+            int uniquescount = uniques.size();
+            
+            if(pkscount > 0){
+                output.write("db." + curtab + ".ensureIndex( {");
+                for(i = 0; i < pkscount; i++){
+                    if(i != 0) output.write(", ");
+                    output.write(pks.get(i) + " : 1");
+                }
+                output.write("} )" + System.getProperty("line.separator"));
+            }
+            if(uniquescount > 0){
+                output.write("db." + curtab + ".createIndex( {");
+                for(i = 0; i < uniquescount; i++){
+                    if(i != 0) output.write(", ");
+                    output.write(uniques.get(i) + " : 1");
+                }
+                output.write("} , { unique : true, sparse : true } )" + System.getProperty("line.separator"));
+            }
+        }
+    }
+    
+    private boolean generateIDOutput(FileWriter output) throws IOException{
+        connection = conman.getConnection();
+        stmt = conman.makeStatement(connection);
+        rs = conman.makeResultSet(stmt, "SELECT table_name FROM user_tables WHERE table_name NOT IN(SELECT table_name FROM user_snapshots)");
+        
+        if(connection != null && stmt != null && rs != null){
+            /* Iteration in tables */
+            try{
+                while (rs.next()) {
+                    generateIDTable(output, rs.getString("table_name"));
+                }
+            }catch(SQLException sqle){
+                System.out.println(message_issueGeneric + sqle.getMessage());
+            }
+            
+            flushDB(connection, stmt, rs);
+        }
+        else{
+            System.out.println(message_issueTables);
+        }
+        
+        return true;
+    }
+    
+    public boolean generateIndexes() throws IOException{
+        Scanner scanner = new Scanner(System.in);
+        String filename = "";
+        FileWriter output = null;
+        
+        System.out.println(">[Index GENERATOR aka IdGen]:");
+        System.out.println(">[IdGen]: Please type the output filename");
+        System.out.printf(">[IdGen]: ");
+        filename = scanner.nextLine();
+        
+        try{
+            output = new FileWriter(filename);
+            System.out.println(message_successOpenFile);
+            output.write("use " + this.user + System.getProperty("line.separator"));
+            generateIDOutput(output);
         }
         finally{
             if(output != null){
@@ -320,6 +489,11 @@ public class DBManager {
                     }
                     break;
                 case 2:
+                    try{
+                        generateIndexes();
+                    }catch(IOException ioe){
+                        System.out.println(message_issueGeneric + ioe.getMessage());
+                    }
                     break;
             }
         }
