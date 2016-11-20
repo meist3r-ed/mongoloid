@@ -1,0 +1,129 @@
+use a8937416
+db.runCommand( {
+    collmod: "LE01ESTADO",
+    validator : { $and : [ { SIGLA : { $exists : true, $type : "string" } },
+                            { NOME : { $exists : true, $type : "string" } } ] },
+    validationLevel: "strict",
+    validationAction: "warn"
+} )
+db.runCommand( {
+    collmod: "LE02CIDADE",
+    validator : { $and : [ { SIGLAESTADO : { $exists : true, $type : "string" } },
+                            { NOME : { $exists : true, $type : "string" } },
+                            { POPULACAO : { $exists : true, $gte : 0 } } ] },
+    validationLevel: "strict",
+    validationAction: "warn"
+} )
+db.runCommand( {
+    collmod: "LE03ZONA",
+    validator : { $and : [ { NROZONA : { $exists : true } },
+                            { NRODEURNASRESERVAS : { $exists : true } } ] },
+    validationLevel: "strict",
+    validationAction: "warn"
+} )
+db.runCommand( {
+    collmod: "LE04BAIRRO",
+    validator : { $and : [ { NOME : { $exists : true, $type : "string" } },
+                            { NOMECIDADE : { $exists : true, $type : "string" } },
+                            { SIGLAESTADO : { $exists : true, $type : "string" } },
+                            { NROZONA : { $exists : true } } ] },
+    validationLevel: "strict",
+    validationAction: "warn"
+} )
+db.runCommand( {
+    collmod: "LE05URNA",
+    validator : { $and : [ { NSERIAL : { $exists : true } },
+                            { ESTADO : { $exists : true, $in : [ "funcional", "manutencao" ] } } ] },
+    validationLevel: "strict",
+    validationAction: "warn"
+} )
+db.runCommand( {
+    collmod: "LE06SESSAO",
+    validator : { $and : [ { NROSESSAO : { $exists : true } },
+                            { NSERIAL : { $exists : true } } ] },
+    validationLevel: "strict",
+    validationAction: "warn"
+} )
+db.runCommand( {
+    collmod: "LE07PARTIDO",
+    validator : { $and : [ { SIGLA : { $exists : true, $type : "string" } },
+                            { NOME : { $exists : true, $type : "string" } } ] },
+    validationLevel: "strict",
+    validationAction: "warn"
+} )
+db.runCommand( {
+    collmod: "LE08CANDIDATO",
+    validator : { $and : [ { NROCAND : { $exists : true } },
+                        { TIPO : { $exists : true, $in : [ "politico", "especial" ] } },
+                        { NOME : { $exists : true, $type : "string" } },
+                        { $or : [ { %and : [ { TIPO : { $eq : "politico" } },
+                                            { SIGLAPARTIDO : { $exists : true } },
+                                            { CPF : { $exists : true } } ] },
+                                  { %and : [ { TIPO : { $eq : "especial" } },
+                                            { SIGLAPARTIDO : { $exists : false } },
+                                            { CPF : { $exists : false } },
+                                            { IDADE : { $exists : false } },
+                                            { APELIDO : { $exists : false } } ] }
+                                ] } ] },
+    validationLevel: "strict",
+    validationAction: "warn"
+} )
+db.runCommand( {
+    collmod: "LE09CARGO",
+    validator : { $and : [ { CODCARGO : { $exists : true } },
+                            { POSSUIVICE : { $exists : true, $in : [ 0, 1 ] } },
+                            { ANOBASE : { $exists : true, $gte : 1985, $lte : 2100 } },
+                            { ANOSMANDATO : { $exists : true, %gt : 0 } },
+                            { NOMEDESCRITIVO : { $exists : true } },
+                            { NRODECADEIRAS : { $exists : true, $gt : 0 } },
+                            { ESFERA : { $exists : true, $in : [ "F", "E", "M" ] } },
+                            { SALARIO : { $gt : 0 } },
+                            { %or : [ { $and : [ { ESFERA : { $eq : "F" } },
+                                            { NOMECIDADE : { $exists : false } },
+                                            { SIGLAESTADO : { $exists : false } } ] },
+                                      { $and : [ { ESFERA : { $eq : "E" } },
+                                            { NOMECIDADE : { $exists : false } },
+                                            { SIGLAESTADO : { $exists : true } } ] },
+                                      { $and : [ { ESFERA : { $eq : "M" } },
+                                            { NOMECIDADE : { $exists : true } },
+                                            { SIGLAESTADO : { $exists : true } } ] }
+                            ] } ] },
+    validationLevel: "strict",
+    validationAction: "warn"
+} )
+db.runCommand( {
+    collmod: "LE10CANDIDATURA",
+    validator : { $and : [ { REG : { $exists : true } },
+                            { CODCARGO : { $exists : true } },
+                            { ANO : { $exists : true, $gte : 1985, $lte : 2100 } },
+                            { NROCAND : { $exists : true } } ] },
+    validationLevel: "strict",
+    validationAction: "warn"
+} )
+db.runCommand( {
+    collmod: "LE11PLEITO",
+    validator : { $and : [ { NROSESSAO : { $exists : true } },
+                            { NROZONA : { $exists : true } },
+                            { CODCARGO : { $exists : true } },
+                            { ANO : { $exists : true } },
+                            { NROCAND : { $exists : true } },
+                            { TOTAL : { $exists : true } } ] },
+    validationLevel: "strict",
+    validationAction: "warn"
+} )
+db.runCommand( {
+    collmod: "LE12PESQUISA",
+    validator : { $and : [ { REGPESQUISA : { $exists : true } },
+                            { PERIODOINICIO : { $exists : true } },
+                            { PERIODOFIM : { $exists : true } } ] },
+    validationLevel: "strict",
+    validationAction: "warn"
+} )
+db.runCommand( {
+    collmod: "LE13INTENCAODEVOTO",
+    validator : { $and : [ { REGPESQUISA : { $exists : true } },
+                            { REGCANDID : { $exists : true } },
+                            { TOTAL : { $exists : true } } ] },
+    validationLevel: "strict",
+    validationAction: "warn"
+} )

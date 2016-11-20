@@ -33,7 +33,9 @@ public class DBManager {
     ArrayList<String> pks;
     ArrayList<String> uniques;
     ArrayList<String> fks;
+    ArrayList<String> fksCheck;
     ArrayList<String> fksRefTabs;
+    ArrayList<String> fksRefTabsCheck;
     ArrayList<String> fksRefCols;
         
     ConnectionManager conman;
@@ -162,6 +164,17 @@ public class DBManager {
         }
     }
     
+    /* Copies an ArrayList<String> */
+    public ArrayList<String> copy(ArrayList<String> src){
+        if(src != null){
+            ArrayList<String> dest = new ArrayList<String>();
+            for(String str : src)
+                dest.add(str);
+            return dest;
+        }
+        return null;
+    }
+    
     /* Writes the column specified by col into the output file */
     private void writeColumn(FileWriter output, ResultSet rstup, int col) throws IOException{
         try{
@@ -183,15 +196,32 @@ public class DBManager {
         try{
             String curtype = rsmd.getColumnTypeName(col).toLowerCase();
             int fkid = fks.indexOf(rsmd.getColumnName(col));
+            String curtab = fksRefTabs.get(fkid);
             
-            output.write("\"" + rsmd.getColumnName(col) + "\" : ");
-            output.write("{ \"" + fksRefCols.get(fkid) + "\" : ");
-            if(curtype.equals("number"))
-                output.write(rstup.getString(col));
-            else if(curtype.equals("date"))
-                output.write("ISODate(\"" + rstup.getString(col) + "\")");
-            else
-                output.write("\"" + rstup.getString(col) + "\"");
+            output.write("\"" + curtab + "\" : { ");
+            while(true){
+                output.write("\"" + fksRefCols.get(fkid) + "\" : ");
+                if(curtype.equals("number"))
+                    output.write(rstup.getString(col));
+                else if(curtype.equals("date"))
+                    output.write("ISODate(\"" + rstup.getString(col) + "\")");
+                else
+                    output.write("\"" + rstup.getString(col) + "\"");
+                fksCheck.set(fkid, "ok");
+                fksRefTabsCheck.set(fkid, "ok");
+                fkid = fksRefTabsCheck.indexOf(curtab);
+                if(fkid != -1){
+                    col = rstup.findColumn(fks.get(fkid));
+                    if(rstup.getString(col) != null){
+                        output.write(", ");
+                        curtype = rsmd.getColumnTypeName(col).toLowerCase();
+                    }
+                    else
+                        break;
+                }
+                else
+                    break;
+            }
             output.write(" }");
         }catch(SQLException sqle){
             System.out.println(message_issueGeneric + sqle.getMessage());
@@ -229,22 +259,31 @@ public class DBManager {
             rstup.next();
             /* Runs through tuples */
             while(true){
-                output.write("db." + curtab + ".insert(");
-                output.write("{ ");
+                output.write("db." + curtab + ".insert( { ");
                 int i = 0;
+                
+                fksCheck = copy(fks);
+                fksRefTabsCheck = copy(fksRefTabs);
                 
                 /* Mongo's document _id */
                 if(pkcount != 0){
                     output.write("\"_id\" : { ");
                     for(i = 0; i < pkcount; i++){
-                        if(i != 0) output.write(", ");
-                        if(opt == 1) writeColumn(output, rstup, rstup.findColumn(pks.get(i)));
-                        else if(opt == 2){
-                            if(fks.contains(pks.get(i))){
+                        if(opt == 2 && fksCheck.size() > 0){
+                            if(fksCheck.contains(pks.get(i))){
+                                if(i != 0) output.write(", ");
                                 writeRefColumn(output, rstup, rstup.findColumn(pks.get(i)));
                             }
-                            else
-                                writeColumn(output, rstup, rstup.findColumn(pks.get(i)));
+                            else{
+                                if(!fks.contains(pks.get(i))){
+                                    if(i != 0) output.write(", ");
+                                    writeColumn(output, rstup, rstup.findColumn(pks.get(i)));
+                                }
+                            }
+                        }
+                        else{
+                            if(i != 0) output.write(", ");
+                            writeColumn(output, rstup, rstup.findColumn(pks.get(i)));
                         }
                     }
                     output.write(" }");
@@ -254,20 +293,27 @@ public class DBManager {
                 if(pkcount < cnt){
                     for(i = 0; i < cnt; i++){
                         if(!pks.contains(rsmd.getColumnName(i + 1)) && rstup.getString(i + 1) != null){
-                            if(i != 0) output.write(", ");
-                            if(opt == 1) writeColumn(output, rstup, i + 1);
-                            else if(opt == 2){
-                                if(fks.contains(rsmd.getColumnName(i + 1))){
+                            if(opt == 2 && fksCheck.size() > 0){
+                                if(fksCheck.contains(rsmd.getColumnName(i + 1))){
+                                    if(i != 0) output.write(", ");
                                     writeRefColumn(output, rstup, i + 1);
                                 }
-                                else
-                                    writeColumn(output, rstup, i + 1);
+                                else{
+                                    if(!fks.contains(rsmd.getColumnName(i + 1))){
+                                        if(i != 0) output.write(", ");
+                                        writeColumn(output, rstup, i + 1);
+                                    }
+                                }
+                            }
+                            else{
+                                if(i != 0) output.write(", ");
+                                writeColumn(output, rstup, i + 1);
                             }
                         }
                     }
                 }
                 
-                output.write(" })");
+                output.write(" } )");
                 if(rstup.next())
                     output.write(System.getProperty("line.separator"));
                 else
@@ -276,7 +322,7 @@ public class DBManager {
             output.write(System.getProperty("line.separator"));
             flushStatement(stmttup);
         }catch(SQLException sqle){
-            output.write("})" + System.getProperty("line.separator"));
+            output.write("} )" + System.getProperty("line.separator"));
             System.out.println(message_issueGeneric + sqle.getMessage());
         }
     }
@@ -361,19 +407,9 @@ public class DBManager {
             
             System.out.println(">[IdGen]: CURRENT TABLE: " + curtab);
             
-            getPks(curtab);
             getUniques(curtab);
-            int pkscount = pks.size();
             int uniquescount = uniques.size();
             
-            if(pkscount > 0){
-                output.write("db." + curtab + ".ensureIndex( {");
-                for(i = 0; i < pkscount; i++){
-                    if(i != 0) output.write(", ");
-                    output.write(pks.get(i) + " : 1");
-                }
-                output.write("} )" + System.getProperty("line.separator"));
-            }
             if(uniquescount > 0){
                 output.write("db." + curtab + ".createIndex( {");
                 for(i = 0; i < uniquescount; i++){
