@@ -176,16 +176,18 @@ public class DBManager {
     }
     
     /* Writes the column specified by col into the output file */
-    private void writeColumn(FileWriter output, ResultSet rstup, int col) throws IOException{
+    private void writeColumn(FileWriter output, ResultSet rstup, ResultSetMetaData rsmd, int col) throws IOException{
         try{
-            String curtype = rsmd.getColumnTypeName(col).toLowerCase();
-            output.write("\"" + rsmd.getColumnName(col) + "\" : ");
-            if(curtype.equals("number"))
-                output.write(rstup.getString(col));
-            else if(curtype.equals("date"))
-                output.write("ISODate(\"" + rstup.getString(col) + "\")");
-            else
-                output.write("\"" + rstup.getString(col) + "\"");
+            if(rstup.getString(col) != null){
+                String curtype = rsmd.getColumnTypeName(col).toLowerCase();
+                output.write("\"" + rsmd.getColumnName(col) + "\" : ");
+                if(curtype.equals("number"))
+                    output.write(rstup.getString(col));
+                else if(curtype.equals("date"))
+                    output.write("ISODate(\"" + rstup.getString(col) + "\")");
+                else
+                    output.write("\"" + rstup.getString(col) + "\"");
+            }
         }catch(SQLException sqle){
             System.out.println(message_issueGeneric + sqle.getMessage());
         }
@@ -223,6 +225,59 @@ public class DBManager {
                     break;
             }
             output.write(" }");
+        }catch(SQLException sqle){
+            System.out.println(message_issueGeneric + sqle.getMessage());
+        }
+    }
+    
+    /* Writes the column specified by col into the output file */
+    private void writeEmbColumn(FileWriter output, ResultSet rstup, int col) throws IOException{
+        try{
+            String curtype = rsmd.getColumnTypeName(col).toLowerCase();
+            int fkid = fks.indexOf(rsmd.getColumnName(col));
+            
+            String curtab = fksRefTabs.get(fkid);
+            String embcolquery = "SELECT * FROM " + curtab + " WHERE ";
+            
+            while(true){
+                embcolquery = embcolquery +  fksRefCols.get(fkid) + " = ";
+                if(curtype.equals("number"))
+                    embcolquery = embcolquery + rstup.getString(col);
+                else
+                    embcolquery = embcolquery + "'" + rstup.getString(col) + "'";
+                fksCheck.set(fkid, "ok");
+                fksRefTabsCheck.set(fkid, "ok");
+                fkid = fksRefTabsCheck.indexOf(curtab);
+                if(fkid != -1){
+                    col = rstup.findColumn(fks.get(fkid));
+                    if(rstup.getString(col) != null){
+                        embcolquery = embcolquery + (" AND ");
+                        curtype = rsmd.getColumnTypeName(col).toLowerCase();
+                    }
+                    else
+                        break;
+                }
+                else
+                    break;
+            }
+            
+            Statement estmt = connection.createStatement();
+            ResultSet ers = estmt.executeQuery(embcolquery);
+            ResultSetMetaData ersmd = ers.getMetaData();
+            
+            if(ers.next()){
+                int i = 0;
+                output.write("\"" + curtab + "\" : { ");
+                
+                for (i = 0; i < ersmd.getColumnCount(); i++){
+                    if(i != 0) output.write(", ");
+                    writeColumn(output, ers, ersmd, i + 1);
+                }
+                
+                output.write(" }");
+            }
+            
+            estmt.close();
         }catch(SQLException sqle){
             System.out.println(message_issueGeneric + sqle.getMessage());
         }
@@ -269,21 +324,22 @@ public class DBManager {
                 if(pkcount != 0){
                     output.write("\"_id\" : { ");
                     for(i = 0; i < pkcount; i++){
-                        if(opt == 2 && fksCheck.size() > 0){
+                        if(opt > 1 && fksCheck.size() > 0){
                             if(fksCheck.contains(pks.get(i))){
                                 if(i != 0) output.write(", ");
-                                writeRefColumn(output, rstup, rstup.findColumn(pks.get(i)));
+                                if(opt == 2) writeRefColumn(output, rstup, rstup.findColumn(pks.get(i)));
+                                if(opt == 3) writeEmbColumn(output, rstup, rstup.findColumn(pks.get(i)));
                             }
                             else{
                                 if(!fks.contains(pks.get(i))){
                                     if(i != 0) output.write(", ");
-                                    writeColumn(output, rstup, rstup.findColumn(pks.get(i)));
+                                    writeColumn(output, rstup, rsmd, rstup.findColumn(pks.get(i)));
                                 }
                             }
                         }
                         else{
                             if(i != 0) output.write(", ");
-                            writeColumn(output, rstup, rstup.findColumn(pks.get(i)));
+                            writeColumn(output, rstup, rsmd, rstup.findColumn(pks.get(i)));
                         }
                     }
                     output.write(" }");
@@ -293,21 +349,22 @@ public class DBManager {
                 if(pkcount < cnt){
                     for(i = 0; i < cnt; i++){
                         if(!pks.contains(rsmd.getColumnName(i + 1)) && rstup.getString(i + 1) != null){
-                            if(opt == 2 && fksCheck.size() > 0){
+                            if(opt > 1 && fksCheck.size() > 0){
                                 if(fksCheck.contains(rsmd.getColumnName(i + 1))){
                                     if(i != 0) output.write(", ");
-                                    writeRefColumn(output, rstup, i + 1);
+                                    if(opt == 2) writeRefColumn(output, rstup, i + 1);
+                                    if(opt == 3) writeEmbColumn(output, rstup, i + 1);
                                 }
                                 else{
                                     if(!fks.contains(rsmd.getColumnName(i + 1))){
                                         if(i != 0) output.write(", ");
-                                        writeColumn(output, rstup, i + 1);
+                                        writeColumn(output, rstup, rsmd, i + 1);
                                     }
                                 }
                             }
                             else{
                                 if(i != 0) output.write(", ");
-                                writeColumn(output, rstup, i + 1);
+                                writeColumn(output, rstup, rsmd, i + 1);
                             }
                         }
                     }
@@ -335,8 +392,10 @@ public class DBManager {
             
             System.out.println(">[DbGen]: CURRENT TABLE: " + curtab);
             getFks(curtab);
-            if(fks.size() > 0)
-                System.out.println(">[DbGen]: Choose an operation [1. Simple, 2. Referencing, 3. Embedding, 4. NxN, 5. Skip]");
+            if(fks.size() > 0){
+                System.out.println(">[DbGen]: Choose an operation [1. Simple, 2. Referencing,");
+                System.out.println(">[DbGen]: 3. Embedding, 4. NxN, 5. Skip]");
+            }
             else
                 System.out.println(">[DbGen]: Choose an operation [1. Simple, 5. Skip]");
             System.out.printf(">[DbGen]: ");
@@ -496,10 +555,19 @@ public class DBManager {
             System.out.printf(">[Username]: ");
             tmp = scanner.nextLine();
             user = tmp;
+            
+            /* Password - hidden input */
+            Console cons = System.console();
+            if(cons != null){
+                pass = String.valueOf(cons.readPassword(">[Password]: "));
+            }
             /* Password */
-            System.out.printf(">[Password]: ");
-            tmp = scanner.nextLine();
-            pass = tmp;
+            else{
+                System.out.println(">[System]: WARNING: Could not load console for hidden input");
+                System.out.printf(">[Password]: ");
+                tmp = scanner.nextLine();
+                pass = tmp;
+            }
 
             ok = conman.connect(server, user, pass);
         }
