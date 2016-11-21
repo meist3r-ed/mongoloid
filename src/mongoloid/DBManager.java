@@ -267,17 +267,88 @@ public class DBManager {
             
             if(ers.next()){
                 int i = 0;
+                int prev = 0;
                 output.write("\"" + curtab + "\" : { ");
                 
                 for (i = 0; i < ersmd.getColumnCount(); i++){
-                    if(i != 0) output.write(", ");
-                    writeColumn(output, ers, ersmd, i + 1);
+                    if(ers.getString(i + 1) != null){
+                        if(i != 0 && prev == 1) output.write(", ");
+                        writeColumn(output, ers, ersmd, i + 1);
+                        prev = 1;
+                    }
                 }
                 
                 output.write(" }");
             }
             
             estmt.close();
+        }catch(SQLException sqle){
+            System.out.println(message_issueGeneric + sqle.getMessage());
+        }
+    }
+    
+    /* Check if there is more than one table referenced by the FKs */
+    private boolean checkNxN(String curtab) throws SQLException{
+        for(String tab : fksRefTabs){
+            if(!tab.equals(curtab)
+                && fks.get(fksRefTabs.indexOf(tab)) != null)
+                return true;
+        }
+        return false;
+    }
+    
+    /* Writes the column specified by col into the output file */
+    private void writeNxNColumn(FileWriter output, ResultSet rstup, int col, int mapExtras) throws IOException{
+        try{
+            String curtype = rsmd.getColumnTypeName(col).toLowerCase();
+            int fkid = fks.indexOf(rsmd.getColumnName(col));
+            
+            String curtab = fksRefTabs.get(fkid);
+            /* Check if the NxX mapping is possible */
+            if(!checkNxN(curtab))
+                return;
+            
+            output.write("db." + curtab + ".update( { _id : { ");
+            while(true){
+                output.write(fksRefCols.get(fkid) + " : \"" + rstup.getString(col) + "\"");
+                fksCheck.set(fkid, "ok");
+                fksRefTabsCheck.set(fkid, "ok");
+                fkid = fksRefTabsCheck.indexOf(curtab);
+                if(fkid != -1){
+                    col = rstup.findColumn(fks.get(fkid));
+                    if(rstup.getString(col) != null){
+                        output.write(", ");
+                        curtype = rsmd.getColumnTypeName(col).toLowerCase();
+                    }
+                    else
+                        break;
+                }
+                else
+                    break;
+            }
+            output.write(" }, { $addToSet : { ");
+            
+            int i = 0;
+            int prev = 0;
+            for (i = 0; i < rsmd.getColumnCount(); i++){
+                if(rstup.getString(i + 1) != null){
+                    if(fks.contains(rsmd.getColumnName(i + 1))){
+                        if(!fksRefTabs.get(fks.indexOf(rsmd.getColumnName(i + 1))).equals(curtab)){
+                            if(i != 0 && prev == 1) output.write(", ");
+                            writeColumn(output, rstup, rsmd, i + 1);
+                            prev = 1;
+                        }
+                    }
+                    else{
+                        if(mapExtras == 0){
+                            if(i != 0 && prev == 1) output.write(", ");
+                            writeColumn(output, rstup, rsmd, i + 1);
+                            prev = 1;
+                        }
+                    }
+                }
+            }
+            output.write(" } } )" + System.getProperty("line.separator"));
         }catch(SQLException sqle){
             System.out.println(message_issueGeneric + sqle.getMessage());
         }
@@ -301,7 +372,7 @@ public class DBManager {
             Statement stmttup = connection.createStatement();
             ResultSet rstup = stmttup.executeQuery("SELECT * FROM " + curtab);
             Scanner scanner = null;
-            //int map = 0;
+            int first = 0;
             
             rsmd = rstup.getMetaData();
             
@@ -314,7 +385,7 @@ public class DBManager {
             rstup.next();
             /* Runs through tuples */
             while(true){
-                output.write("db." + curtab + ".insert( { ");
+                if(opt != 4) output.write("db." + curtab + ".insert( { ");
                 int i = 0;
                 
                 fksCheck = copy(fks);
@@ -322,27 +393,31 @@ public class DBManager {
                 
                 /* Mongo's document _id */
                 if(pkcount != 0){
-                    output.write("\"_id\" : { ");
+                    if(opt != 4) output.write("\"_id\" : { ");
                     for(i = 0; i < pkcount; i++){
                         if(opt > 1 && fksCheck.size() > 0){
                             if(fksCheck.contains(pks.get(i))){
-                                if(i != 0) output.write(", ");
+                                if(i != 0 && opt != 4) output.write(", ");
                                 if(opt == 2) writeRefColumn(output, rstup, rstup.findColumn(pks.get(i)));
                                 if(opt == 3) writeEmbColumn(output, rstup, rstup.findColumn(pks.get(i)));
+                                if(opt == 4) writeNxNColumn(output, rstup, rstup.findColumn(pks.get(i)), first);
+                                first = i;
                             }
                             else{
-                                if(!fks.contains(pks.get(i))){
-                                    if(i != 0) output.write(", ");
-                                    writeColumn(output, rstup, rsmd, rstup.findColumn(pks.get(i)));
+                                if(opt != 4){
+                                    if(!fks.contains(pks.get(i))){
+                                        if(i != 0) output.write(", ");
+                                        writeColumn(output, rstup, rsmd, rstup.findColumn(pks.get(i)));
+                                    }
                                 }
                             }
                         }
                         else{
                             if(i != 0) output.write(", ");
-                            writeColumn(output, rstup, rsmd, rstup.findColumn(pks.get(i)));
+                            if(opt != 4) writeColumn(output, rstup, rsmd, rstup.findColumn(pks.get(i)));
                         }
                     }
-                    output.write(" }");
+                    if(opt != 4) output.write(" }");
                 }
                 
                 /* Mongo's attributes */
@@ -351,35 +426,44 @@ public class DBManager {
                         if(!pks.contains(rsmd.getColumnName(i + 1)) && rstup.getString(i + 1) != null){
                             if(opt > 1 && fksCheck.size() > 0){
                                 if(fksCheck.contains(rsmd.getColumnName(i + 1))){
-                                    if(i != 0) output.write(", ");
+                                    if(i != 0 && opt != 4) output.write(", ");
                                     if(opt == 2) writeRefColumn(output, rstup, i + 1);
                                     if(opt == 3) writeEmbColumn(output, rstup, i + 1);
+                                    if(opt == 4) writeNxNColumn(output, rstup, i + 1, first);
+                                    first = i;
                                 }
                                 else{
-                                    if(!fks.contains(rsmd.getColumnName(i + 1))){
-                                        if(i != 0) output.write(", ");
-                                        writeColumn(output, rstup, rsmd, i + 1);
+                                    if(opt != 4){
+                                        if(!fks.contains(rsmd.getColumnName(i + 1))){
+                                            if(i != 0) output.write(", ");
+                                            writeColumn(output, rstup, rsmd, i + 1);
+                                        }
                                     }
                                 }
                             }
                             else{
-                                if(i != 0) output.write(", ");
-                                writeColumn(output, rstup, rsmd, i + 1);
+                                if(opt != 4){
+                                    if(i != 0) output.write(", ");
+                                    writeColumn(output, rstup, rsmd, i + 1);
+                                }
                             }
                         }
                     }
                 }
                 
-                output.write(" } )");
-                if(rstup.next())
-                    output.write(System.getProperty("line.separator"));
+                if(opt != 4) output.write(" } )");
+                if(rstup.next()){
+                    if(opt != 4)
+                        output.write(System.getProperty("line.separator"));
+                }
                 else
                     break;
             }
-            output.write(System.getProperty("line.separator"));
+            if(opt != 4)
+                output.write(System.getProperty("line.separator"));
             flushStatement(stmttup);
         }catch(SQLException sqle){
-            output.write("} )" + System.getProperty("line.separator"));
+            if(opt != 4) output.write("} )" + System.getProperty("line.separator"));
             System.out.println(message_issueGeneric + sqle.getMessage());
         }
     }
@@ -394,7 +478,7 @@ public class DBManager {
             getFks(curtab);
             if(fks.size() > 0){
                 System.out.println(">[DbGen]: Choose an operation [1. Simple, 2. Referencing,");
-                System.out.println(">[DbGen]: 3. Embedding, 4. NxN, 5. Skip]");
+                System.out.println(">[DbGen]: ... 3. Embedding, 4. NxN, 5. Skip]");
             }
             else
                 System.out.println(">[DbGen]: Choose an operation [1. Simple, 5. Skip]");
@@ -402,7 +486,7 @@ public class DBManager {
             opt = scanner.nextInt();
             
             if(opt >= 1 && opt < 5){
-                output.write("db.createCollection(\"" + curtab + "\")" + System.getProperty("line.separator"));
+                if(opt != 4) output.write("db.createCollection(\"" + curtab + "\")" + System.getProperty("line.separator"));
                 generateDBTuples(output, curtab, opt);
             }
         }

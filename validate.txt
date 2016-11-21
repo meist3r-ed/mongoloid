@@ -1,13 +1,13 @@
 use a8937416
 db.runCommand( {
-    collmod: "LE01ESTADO",
+    collMod: "LE01ESTADO",
     validator : { $and : [ { SIGLA : { $exists : true, $type : "string" } },
                             { NOME : { $exists : true, $type : "string" } } ] },
     validationLevel: "strict",
     validationAction: "warn"
 } )
 db.runCommand( {
-    collmod: "LE02CIDADE",
+    collMod: "LE02CIDADE",
     validator : { $and : [ { SIGLAESTADO : { $exists : true, $type : "string" } },
                             { NOME : { $exists : true, $type : "string" } },
                             { POPULACAO : { $exists : true, $gte : 0 } } ] },
@@ -15,14 +15,14 @@ db.runCommand( {
     validationAction: "warn"
 } )
 db.runCommand( {
-    collmod: "LE03ZONA",
+    collMod: "LE03ZONA",
     validator : { $and : [ { NROZONA : { $exists : true } },
                             { NRODEURNASRESERVAS : { $exists : true } } ] },
     validationLevel: "strict",
     validationAction: "warn"
 } )
 db.runCommand( {
-    collmod: "LE04BAIRRO",
+    collMod: "LE04BAIRRO",
     validator : { $and : [ { NOME : { $exists : true, $type : "string" } },
                             { NOMECIDADE : { $exists : true, $type : "string" } },
                             { SIGLAESTADO : { $exists : true, $type : "string" } },
@@ -31,35 +31,35 @@ db.runCommand( {
     validationAction: "warn"
 } )
 db.runCommand( {
-    collmod: "LE05URNA",
+    collMod: "LE05URNA",
     validator : { $and : [ { NSERIAL : { $exists : true } },
                             { ESTADO : { $exists : true, $in : [ "funcional", "manutencao" ] } } ] },
     validationLevel: "strict",
     validationAction: "warn"
 } )
 db.runCommand( {
-    collmod: "LE06SESSAO",
+    collMod: "LE06SESSAO",
     validator : { $and : [ { NROSESSAO : { $exists : true } },
                             { NSERIAL : { $exists : true } } ] },
     validationLevel: "strict",
     validationAction: "warn"
 } )
 db.runCommand( {
-    collmod: "LE07PARTIDO",
+    collMod: "LE07PARTIDO",
     validator : { $and : [ { SIGLA : { $exists : true, $type : "string" } },
                             { NOME : { $exists : true, $type : "string" } } ] },
     validationLevel: "strict",
     validationAction: "warn"
 } )
 db.runCommand( {
-    collmod: "LE08CANDIDATO",
+    collMod: "LE08CANDIDATO",
     validator : { $and : [ { NROCAND : { $exists : true } },
                         { TIPO : { $exists : true, $in : [ "politico", "especial" ] } },
                         { NOME : { $exists : true, $type : "string" } },
-                        { $or : [ { %and : [ { TIPO : { $eq : "politico" } },
+                        { $or : [ { $and : [ { TIPO : { $eq : "politico" } },
                                             { SIGLAPARTIDO : { $exists : true } },
                                             { CPF : { $exists : true } } ] },
-                                  { %and : [ { TIPO : { $eq : "especial" } },
+                                  { $and : [ { TIPO : { $eq : "especial" } },
                                             { SIGLAPARTIDO : { $exists : false } },
                                             { CPF : { $exists : false } },
                                             { IDADE : { $exists : false } },
@@ -69,7 +69,7 @@ db.runCommand( {
     validationAction: "warn"
 } )
 db.runCommand( {
-    collmod: "LE09CARGO",
+    collMod: "LE09CARGO",
     validator : { $and : [ { CODCARGO : { $exists : true } },
                             { POSSUIVICE : { $exists : true, $in : [ 0, 1 ] } },
                             { ANOBASE : { $exists : true, $gte : 1985, $lte : 2100 } },
@@ -92,7 +92,7 @@ db.runCommand( {
     validationAction: "warn"
 } )
 db.runCommand( {
-    collmod: "LE10CANDIDATURA",
+    collMod: "LE10CANDIDATURA",
     validator : { $and : [ { REG : { $exists : true } },
                             { CODCARGO : { $exists : true } },
                             { ANO : { $exists : true, $gte : 1985, $lte : 2100 } },
@@ -101,7 +101,7 @@ db.runCommand( {
     validationAction: "warn"
 } )
 db.runCommand( {
-    collmod: "LE11PLEITO",
+    collMod: "LE11PLEITO",
     validator : { $and : [ { NROSESSAO : { $exists : true } },
                             { NROZONA : { $exists : true } },
                             { CODCARGO : { $exists : true } },
@@ -112,7 +112,7 @@ db.runCommand( {
     validationAction: "warn"
 } )
 db.runCommand( {
-    collmod: "LE12PESQUISA",
+    collMod: "LE12PESQUISA",
     validator : { $and : [ { REGPESQUISA : { $exists : true } },
                             { PERIODOINICIO : { $exists : true } },
                             { PERIODOFIM : { $exists : true } } ] },
@@ -120,7 +120,7 @@ db.runCommand( {
     validationAction: "warn"
 } )
 db.runCommand( {
-    collmod: "LE13INTENCAODEVOTO",
+    collMod: "LE13INTENCAODEVOTO",
     validator : { $and : [ { REGPESQUISA : { $exists : true } },
                             { REGCANDID : { $exists : true } },
                             { TOTAL : { $exists : true } } ] },

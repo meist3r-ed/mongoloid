@@ -1,7 +1,0 @@
-use a8937416
-db.LE01ESTADO.createIndex( {NOME : 1} , { unique : true, sparse : true } )
-db.LE04BAIRRO.createIndex( {CEP : 1} , { unique : true, sparse : true } )
-db.LE07PARTIDO.createIndex( {NOME : 1} , { unique : true, sparse : true } )
-db.LE08CANDIDATO.createIndex( {CPF : 1} , { unique : true, sparse : true } )
-db.LE09CARGO.createIndex( {SIGLAESTADO : 1, NOMECIDADE : 1, NOMEDESCRITIVO : 1} , { unique : true, sparse : true } )
-db.LE10CANDIDATURA.createIndex( {NROCAND : 1, ANO : 1, CODCARGO : 1} , { unique : true, sparse : true } )
